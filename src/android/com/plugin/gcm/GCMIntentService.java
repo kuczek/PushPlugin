@@ -9,13 +9,11 @@ import org.json.JSONObject;
 import android.annotation.SuppressLint;
 import android.app.ActivityManager;
 import android.app.ActivityManager.RunningTaskInfo;
+import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
-import android.media.Ringtone;
-import android.media.RingtoneManager;
-import android.net.Uri;
 import android.os.Bundle;
 import android.support.v4.app.NotificationCompat;
 import android.util.Log;
@@ -69,14 +67,12 @@ public class GCMIntentService extends GCMBaseIntentService {
 		Bundle extras = intent.getExtras();
 		if (extras != null)
 		{
-			boolean	foreground = this.isInForeground();
+			PushPlugin.sendExtras(extras);
 
-			extras.putBoolean("foreground", foreground);
-
-			if (foreground)
-				PushPlugin.sendExtras(extras);
-			else
+			// Send a notification if there is a message and not in foreground
+			if (!PushPlugin.isInForeground() && extras.getString("message").length() != 0) {
 				createNotification(context, extras);
+			}
 		}
 	}
 
@@ -89,14 +85,15 @@ public class GCMIntentService extends GCMBaseIntentService {
 		notificationIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
 		notificationIntent.putExtra("pushBundle", extras);
 
-		PendingIntent contentIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_UPDATE_CURRENT);		
-
-		NotificationCompat.Builder mBuilder = 
+		PendingIntent contentIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+		
+		NotificationCompat.Builder mBuilder =
 			new NotificationCompat.Builder(context)
+				.setDefaults(Notification.DEFAULT_ALL)
 				.setSmallIcon(context.getApplicationInfo().icon)
 				.setWhen(System.currentTimeMillis())
-				.setContentTitle(appName)
-				.setTicker(appName)
+				.setContentTitle(extras.getString("title"))
+				.setTicker(extras.getString("title"))
 				.setContentIntent(contentIntent);
 
 		String message = extras.getString("message");
@@ -110,21 +107,8 @@ public class GCMIntentService extends GCMBaseIntentService {
 		if (msgcnt != null) {
 			mBuilder.setNumber(Integer.parseInt(msgcnt));
 		}
-
+		
 		mNotificationManager.notify((String) appName, NOTIFICATION_ID, mBuilder.build());
-		tryPlayRingtone();
-	}
-
-	private void tryPlayRingtone() 
-	{
-		try {
-			Uri notification = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-			Ringtone r = RingtoneManager.getRingtone(getApplicationContext(), notification);
-			r.play();
-		} 
-		catch (Exception e) {
-			Log.e(TAG, "failed to play notification ringtone");
-		}
 	}
 	
 	public static void cancelNotification(Context context)
@@ -143,18 +127,6 @@ public class GCMIntentService extends GCMBaseIntentService {
 		return (String)appName;
 	}
 	
-	public boolean isInForeground()
-	{
-		ActivityManager activityManager = (ActivityManager) getApplicationContext().getSystemService(Context.ACTIVITY_SERVICE);
-		List<RunningTaskInfo> services = activityManager
-				.getRunningTasks(Integer.MAX_VALUE);
-
-		if (services.get(0).topActivity.getPackageName().toString().equalsIgnoreCase(getApplicationContext().getPackageName().toString()))
-			return true;
-
-		return false;
-	}	
-
 	@Override
 	public void onError(Context context, String errorId) {
 		Log.e(TAG, "onError - errorId: " + errorId);
